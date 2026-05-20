@@ -142,9 +142,13 @@ def send_email_via_smtp(recipient, subject, html_body, cc_recipient=None):
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(email_user, email_password)
+        
         recipients = [recipient]
         if cc_recipient:
-            recipients.append(cc_recipient)
+            # Support multiple CC emails separated by commas
+            cc_list = [email.strip() for email in cc_recipient.split(',') if email.strip()]
+            recipients.extend(cc_list)
+            
         server.sendmail(email_user, recipients, msg.as_string())
         server.quit()
         return True
