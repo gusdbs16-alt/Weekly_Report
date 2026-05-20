@@ -29,22 +29,22 @@ def get_best_model():
         models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         print(f"Available models: {models}")
         
-        # Priority 1: gemini-1.5-flash
+        # Priority 1: gemini-2.5-flash (Standard in 2026)
+        for m in models:
+            if 'gemini-2.5-flash' in m:
+                return m
+        # Priority 2: gemini-2.0-flash
+        for m in models:
+            if 'gemini-2.0-flash' in m:
+                return m
+        # Priority 3: gemini-1.5-flash
         for m in models:
             if 'gemini-1.5-flash' in m:
-                return m
-        # Priority 2: Any flash model
-        for m in models:
-            if 'flash' in m:
-                return m
-        # Priority 3: Any pro model
-        for m in models:
-            if 'pro' in m:
                 return m
         return models[0] if models else None
     except Exception as e:
         print(f"Error listing models: {e}")
-        return 'models/gemini-1.5-flash' # Fallback
+        return 'models/gemini-1.5-flash'
 
 def validate_url(url):
     try:
@@ -103,9 +103,10 @@ def get_automated_content():
     }}
     """
     try:
+        # Use 'google_search' instead of 'google_search_retrieval' for 2.x models
         model = genai.GenerativeModel(
             model_name=model_name,
-            tools=[{'google_search_retrieval': {}}]
+            tools=[{'google_search': {}}]
         )
         
         response = model.generate_content(prompt)
