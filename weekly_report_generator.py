@@ -78,6 +78,7 @@ def get_automated_content():
     }}
     """
     try:
+        # Explicitly using gemini-1.5-flash which is the most stable for free tier
         response = client.models.generate_content(
             model='gemini-1.5-flash',
             contents=prompt,
