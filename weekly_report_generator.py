@@ -5,11 +5,10 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 from dotenv import load_dotenv
 
-# Load environment variables (Local development)
+# Load environment variables
 load_dotenv()
 
 # Environment Variables
@@ -20,9 +19,9 @@ email_recipient = os.getenv("EMAIL_RECIPIENT", "gusdbs16@knu.ac.kr")
 email_cc = os.getenv("EMAIL_CC", "dance3414@naver.com")
 
 if api_key:
-    client = genai.Client(api_key=api_key)
+    genai.configure(api_key=api_key)
 else:
-    print("Warning: GEMINI_API_KEY not found. Automated content generation will fail.")
+    print("Warning: GEMINI_API_KEY not found.")
 
 def validate_url(url):
     try:
@@ -78,16 +77,15 @@ def get_automated_content():
     }}
     """
     try:
-        # Explicitly using gemini-1.5-flash which is the most stable for free tier
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(google_search=types.GoogleSearch())]
-            )
+        # Standard model and tool usage for google-generativeai
+        model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash',
+            tools=[{'google_search_retrieval': {}}]
         )
         
+        response = model.generate_content(prompt)
         content_text = response.text.strip()
+        
         if content_text.startswith("```json"):
             content_text = content_text[7:-3].strip()
         elif content_text.startswith("```"):
@@ -123,7 +121,6 @@ def send_email_via_smtp(recipient, subject, html_body, cc_recipient=None):
     msg.attach(MIMEText(html_body, 'html'))
 
     try:
-        # Gmail SMTP settings
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(email_user, email_password)
@@ -143,9 +140,6 @@ def generate_report_html(data):
     today = datetime.date.today()
     report_date = today.strftime("%Y-%m-%d")
     
-    if not data:
-        return "Error: No data to generate report."
-
     radar_papers_html = ""
     for idx, paper in enumerate(data['radar_papers']):
         radar_papers_html += f"""
@@ -201,22 +195,17 @@ def generate_report_html(data):
             <h2 style="margin: 0;">[주간 레이더 기상 및 통계/AI 전문 리포트]</h2>
             <p style="margin: 5px 0 0 0; opacity: 0.8;">{report_date}</p>
         </div>
-
         <div style="padding: 20px;">
             <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 25px; border-left: 5px solid #3498db;">
                 <strong>금주 연구 키워드:</strong> {data['keywords']}
             </div>
-
             <h3 style="color: #2980b9; border-bottom: 2px solid #2980b9; padding-bottom: 5px;">1. 기상 레이더 및 구름 물리 (Radar & Cloud Physics)</h3>
             {radar_papers_html}
-
             <h3 style="color: #e67e22; border-bottom: 2px solid #e67e22; padding-bottom: 5px; margin-top: 45px;">2. 통계 및 AI (Statistics & AI)</h3>
             {ai_papers_html}
-
             <h3 style="color: #27ae60; border-bottom: 2px solid #27ae60; padding-bottom: 5px; margin-top: 45px;">3. 주간 주요 뉴스 종합 리포트</h3>
             {news_html}
         </div>
-
         <div style="background-color: #2c3e50; padding: 20px; border-radius: 0 0 10px 10px; color: white; text-align: center; margin-top: 40px;">
             <p style="font-size: 0.85em; margin: 0;">
                 본 리포트는 Gemini CLI가 자동 생성하였습니다.<br>
@@ -234,13 +223,11 @@ def execute_full_report_task():
     
     if report_data:
         html_content = generate_report_html(report_data)
-        
         subject = f"[주간 요약 보고서] {datetime.date.today().strftime('%Y-%m-%d')}"
         
         print(f"[{datetime.datetime.now()}] Sending email via SMTP...")
         success = send_email_via_smtp(email_recipient, subject, html_content, cc_recipient=email_cc)
         
-        # Save a local copy in the current directory
         filename = f"{datetime.date.today().strftime('%Y%m%d')}_weekly_report.html"
         with open(filename, "w", encoding="utf-8") as f:
             f.write(html_content)
@@ -249,12 +236,9 @@ def execute_full_report_task():
             print(f"[{datetime.datetime.now()}] Automated Professional HTML Email sent to {email_recipient}")
             return True, "Report sent successfully."
         else:
-            print(f"[{datetime.datetime.now()}] Failed to send email")
             return False, "Failed to send email via SMTP."
     else:
-        error_msg = "Failed to generate content via Gemini API."
-        print(f"[{datetime.datetime.now()}] {error_msg}")
-        return False, error_msg
+        return False, "Failed to generate content via Gemini API."
 
 if __name__ == "__main__":
     execute_full_report_task()
