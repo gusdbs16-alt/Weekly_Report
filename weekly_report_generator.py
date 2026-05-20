@@ -23,6 +23,29 @@ if api_key:
 else:
     print("Warning: GEMINI_API_KEY not found.")
 
+def get_best_model():
+    """Find the best available model from the API."""
+    try:
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        print(f"Available models: {models}")
+        
+        # Priority 1: gemini-1.5-flash
+        for m in models:
+            if 'gemini-1.5-flash' in m:
+                return m
+        # Priority 2: Any flash model
+        for m in models:
+            if 'flash' in m:
+                return m
+        # Priority 3: Any pro model
+        for m in models:
+            if 'pro' in m:
+                return m
+        return models[0] if models else None
+    except Exception as e:
+        print(f"Error listing models: {e}")
+        return 'models/gemini-1.5-flash' # Fallback
+
 def validate_url(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
@@ -36,6 +59,9 @@ def validate_url(url):
 
 def get_automated_content():
     today = datetime.date.today()
+    model_name = get_best_model()
+    print(f"Using model: {model_name}")
+    
     prompt = f"""
     당신은 기상 레이더 및 AI 분야의 전문 연구원입니다. 구글 검색을 활용하여 {today} 기준의 최신 실제 정보(뉴스 및 논문)를 바탕으로 주간 리포트 내용을 생성해주세요.
     
@@ -77,9 +103,8 @@ def get_automated_content():
     }}
     """
     try:
-        # Standard model and tool usage for google-generativeai
         model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
+            model_name=model_name,
             tools=[{'google_search_retrieval': {}}]
         )
         
@@ -117,18 +142,15 @@ def send_email_via_smtp(recipient, subject, html_body, cc_recipient=None):
     if cc_recipient:
         msg['Cc'] = cc_recipient
     msg['Subject'] = subject
-
     msg.attach(MIMEText(html_body, 'html'))
 
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(email_user, email_password)
-        
         recipients = [recipient]
         if cc_recipient:
             recipients.append(cc_recipient)
-            
         server.sendmail(email_user, recipients, msg.as_string())
         server.quit()
         return True
@@ -224,13 +246,8 @@ def execute_full_report_task():
     if report_data:
         html_content = generate_report_html(report_data)
         subject = f"[주간 요약 보고서] {datetime.date.today().strftime('%Y-%m-%d')}"
-        
         print(f"[{datetime.datetime.now()}] Sending email via SMTP...")
         success = send_email_via_smtp(email_recipient, subject, html_content, cc_recipient=email_cc)
-        
-        filename = f"{datetime.date.today().strftime('%Y%m%d')}_weekly_report.html"
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(html_content)
         
         if success:
             print(f"[{datetime.datetime.now()}] Automated Professional HTML Email sent to {email_recipient}")
