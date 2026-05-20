@@ -5,7 +5,8 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -19,32 +20,10 @@ email_recipient = os.getenv("EMAIL_RECIPIENT", "gusdbs16@knu.ac.kr")
 email_cc = os.getenv("EMAIL_CC", "dance3414@naver.com")
 
 if api_key:
-    genai.configure(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 else:
     print("Warning: GEMINI_API_KEY not found.")
-
-def get_best_model():
-    """Find the best available model from the API."""
-    try:
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        print(f"Available models: {models}")
-        
-        # Priority 1: gemini-2.5-flash (Standard in 2026)
-        for m in models:
-            if 'gemini-2.5-flash' in m:
-                return m
-        # Priority 2: gemini-2.0-flash
-        for m in models:
-            if 'gemini-2.0-flash' in m:
-                return m
-        # Priority 3: gemini-1.5-flash
-        for m in models:
-            if 'gemini-1.5-flash' in m:
-                return m
-        return models[0] if models else None
-    except Exception as e:
-        print(f"Error listing models: {e}")
-        return 'models/gemini-1.5-flash'
+    client = None
 
 def validate_url(url):
     try:
@@ -58,8 +37,13 @@ def validate_url(url):
         return False
 
 def get_automated_content():
+    if not client:
+        print("Error: GenAI client not initialized.")
+        return None
+
     today = datetime.date.today()
-    model_name = get_best_model()
+    # Explicitly using gemini-2.5-flash as discovered in the environment
+    model_name = 'gemini-2.5-flash'
     print(f"Using model: {model_name}")
     
     prompt = f"""
@@ -103,13 +87,16 @@ def get_automated_content():
     }}
     """
     try:
-        # Use 'google_search' instead of 'google_search_retrieval' for 2.x models
-        model = genai.GenerativeModel(
-            model_name=model_name,
-            tools=[{'google_search': {}}]
+        # Using the STRICTLY REQUIRED new SDK structure for tools
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.7
+            )
         )
         
-        response = model.generate_content(prompt)
         content_text = response.text.strip()
         
         if content_text.startswith("```json"):
