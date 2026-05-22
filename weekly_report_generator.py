@@ -10,7 +10,13 @@ from google.genai import types
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv()
+# Look for .env in current directory, then in project root
+if os.path.exists(".env"):
+    load_dotenv(".env")
+elif os.path.exists("../.env"):
+    load_dotenv("../.env")
+else:
+    load_dotenv()
 
 # Environment Variables
 api_key = os.getenv("GEMINI_API_KEY")
@@ -19,11 +25,11 @@ email_password = os.getenv("EMAIL_PASSWORD")
 email_recipient = os.getenv("EMAIL_RECIPIENT", "gusdbs16@knu.ac.kr")
 email_cc = os.getenv("EMAIL_CC", "dance3414@naver.com")
 
-if api_key:
-    client = genai.Client(api_key=api_key)
-else:
-    print("Warning: GEMINI_API_KEY not found.")
+if not api_key:
+    print("Error: GEMINI_API_KEY not found. Please set it in your environment or .env file.")
     client = None
+else:
+    client = genai.Client(api_key=api_key)
 
 def validate_url(url):
     try:
