@@ -109,6 +109,10 @@ def get_automated_content():
             )
         )
         
+        if not response or not response.text:
+            print(f"Error: Empty response from Gemini API. Response object: {response}")
+            return None
+            
         content_text = response.text.strip()
         
         if content_text.startswith("```json"):
