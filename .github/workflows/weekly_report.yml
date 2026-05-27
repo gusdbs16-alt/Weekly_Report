@@ -2,8 +2,8 @@ name: Weekly Report Automation
 
 on:
   schedule:
-    # Monday, Wednesday, Friday 00:30 UTC (09:30 KST)
-    - cron: '30 0 * * 1,3,5'
+    # Sunday, Tuesday, Thursday 23:10 UTC (08:10 KST)
+    - cron: '10 23 * * 0,2,4'
   workflow_dispatch:
 
 jobs:
