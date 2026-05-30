@@ -1,6 +1,8 @@
 import datetime
 import os
 import json
+import sys
+import time
 import requests
 import smtplib
 from email.mime.text import MIMEText
@@ -42,16 +44,15 @@ def validate_url(url):
     except:
         return False
 
-def get_automated_content():
+def get_automated_content(max_retries=3):
     if not client:
         print("Error: GenAI client not initialized.")
         return None
 
     today = datetime.date.today()
-    # Explicitly using gemini-2.5-flash as discovered in the environment
     model_name = 'gemini-2.5-flash'
     print(f"Using model: {model_name}")
-    
+
     prompt = f"""
     당신은 기상 레이더, 구름 물리, 그리고 최신 AI 기술을 융합하여 분석하는 전문 수석 연구원입니다.
     구글 검색을 활용하여 {today} 기준, **해당 주간에 가장 주목받는 최신 논문(2020년 이후 발행)**과 메인 뉴스를 중심으로 리포트를 생성하세요.
@@ -98,42 +99,49 @@ def get_automated_content():
       ]
     }}
     """
-    try:
-        # Using the STRICTLY REQUIRED new SDK structure for tools
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(google_search=types.GoogleSearch())],
-                temperature=0.7
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                    temperature=0.7
+                )
             )
-        )
-        
-        if not response or not response.text:
-            print(f"Error: Empty response from Gemini API. Response object: {response}")
-            return None
-            
-        content_text = response.text.strip()
-        
-        if content_text.startswith("```json"):
-            content_text = content_text[7:-3].strip()
-        elif content_text.startswith("```"):
-            content_text = content_text[3:-3].strip()
-        
-        data = json.loads(content_text)
-        
-        print(f"[{datetime.datetime.now()}] Validating generated links...")
-        sections = ['radar_papers', 'ai_papers', 'news']
-        for section in sections:
-            for item in data[section]:
-                if not validate_url(item['link']):
-                    search_title = item.get('title') or item.get('title_ko') or item.get('title_en') or "weather radar ai"
-                    item['link'] = "https://www.google.com/search?q=" + search_title.replace(" ", "+")
-        
-        return data
-    except Exception as e:
-        print(f"Error generating content: {e}")
-        return None
+
+            if not response or not response.text:
+                print(f"Error: Empty response from Gemini API. Response object: {response}")
+                return None
+
+            content_text = response.text.strip()
+
+            if content_text.startswith("```json"):
+                content_text = content_text[7:-3].strip()
+            elif content_text.startswith("```"):
+                content_text = content_text[3:-3].strip()
+
+            data = json.loads(content_text)
+
+            print(f"[{datetime.datetime.now()}] Validating generated links...")
+            sections = ['radar_papers', 'ai_papers', 'news']
+            for section in sections:
+                for item in data[section]:
+                    if not validate_url(item['link']):
+                        search_title = item.get('title') or item.get('title_ko') or item.get('title_en') or "weather radar ai"
+                        item['link'] = "https://www.google.com/search?q=" + search_title.replace(" ", "+")
+
+            return data
+
+        except Exception as e:
+            print(f"[Attempt {attempt}/{max_retries}] Error generating content: {e}")
+            if attempt < max_retries:
+                wait_sec = 30 * (2 ** (attempt - 1))  # 30s → 60s → 120s
+                print(f"Retrying in {wait_sec} seconds...")
+                time.sleep(wait_sec)
+
+    print(f"All {max_retries} attempts failed. Giving up.")
+    return None
 
 def send_email_via_smtp(recipient, subject, html_body, cc_recipient=None):
     if not email_user or not email_password:
@@ -266,4 +274,7 @@ def execute_full_report_task():
         return False, "Failed to generate content via Gemini API."
 
 if __name__ == "__main__":
-    execute_full_report_task()
+    success, message = execute_full_report_task()
+    print(f"Result: {message}")
+    if not success:
+        sys.exit(1)
